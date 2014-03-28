@@ -18,7 +18,6 @@ with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 'use strict';
 
-
 YUI.add('service-config-view', function(Y) {
   var ns = Y.namespace('juju.viewlets'),
       views = Y.namespace('juju.views'),
@@ -33,6 +32,8 @@ YUI.add('service-config-view', function(Y) {
     ns.ConflictViewExtension,
     ns.ConfigFileViewExtension
   ];
+  
+  var jsoneditor;
 
   ns.Config = Y.Base.create(name, Y.View, extensions, {
     template: templates['service-configuration'],
@@ -93,11 +94,35 @@ YUI.add('service-config-view', function(Y) {
       var settings = [];
       var db = viewContainerAttrs.db;
       var charm = db.charms.getById(service.get('charm'));
-      var templatedSettings = utils.extractServiceSettings(
-          charm.get('options'), service.get('config'));
+      /*var templatedSettings = utils.extractServiceSettings(
+        charm.get('options'), service.get('config'));*/
 
       var container = this.get('container');
 
+      // Construct a JSON schema from the charm options
+      var schema = {
+        type: "object",
+        properties: charm.get('options')
+      };
+      // Fix options to conform to JSON schema
+      for(var i in schema.properties) {
+        if(!schema.properties.hasOwnProperty(i)) continue;
+        // "int" is an invalid type in JSON schema, change to "integer"
+        if(schema.properties[i].type === "int") schema.properties[i].type = "integer";
+      }
+		
+      // Destroy the previous instance of JSON editor
+      if(jsoneditor) jsoneditor.destroy();
+      
+      // Instantiate the JSON editor
+      jsoneditor = new JSONEditor(container.getDOMNode(),{
+        schema: schema,
+        required_by_default: true,
+        no_additional_properties: true,
+        startval: service.get('config')
+      });
+
+/*
       container.setHTML(
           this.template({
             service: service,
@@ -111,6 +136,7 @@ YUI.add('service-config-view', function(Y) {
           }
       );
       this.attachExpandingTextarea();
+*/
     },
     /**
       Ensures that all resizing textareas are attached.
