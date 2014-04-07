@@ -92,12 +92,17 @@ YUI.add('service-config-view', function(Y) {
     render: function(viewContainerAttrs) {
       var service = viewContainerAttrs.model;
       var settings = [];
+      var self = this;
       var db = viewContainerAttrs.db;
       var charm = db.charms.getById(service.get('charm'));
       /*var templatedSettings = utils.extractServiceSettings(
         charm.get('options'), service.get('config'));*/
 
       var container = this.get('container');
+      
+      container.setHTML('<div class="view-container"><h2>Service settings</h2><div class="config-file view-content"><input type="file"><div class="fakebutton">Import config file...</div></div><div class="view-content charm-settings"></div></div>');
+      
+      var editor_holder = container.one('.charm-settings').getDOMNode();
 
       // Construct a JSON schema from the charm options
       var schema = {
@@ -107,6 +112,9 @@ YUI.add('service-config-view', function(Y) {
       // Fix options to conform to JSON schema
       for(var i in schema.properties) {
         if(!schema.properties.hasOwnProperty(i)) continue;
+        // Include the type in the label
+        schema.properties[i].title = i+" ("+schema.properties[i].type+")";
+        
         // "int" is an invalid type in JSON schema, change to "integer"
         if(schema.properties[i].type === "int") schema.properties[i].type = "integer";
       }
@@ -115,12 +123,36 @@ YUI.add('service-config-view', function(Y) {
       if(jsoneditor) jsoneditor.destroy();
       
       // Instantiate the JSON editor
-      jsoneditor = new JSONEditor(container.getDOMNode(),{
+      jsoneditor = new JSONEditor(editor_holder,{
         schema: schema,
         required_by_default: true,
         no_additional_properties: true,
         startval: service.get('config')
       });
+      this.jsoneditor = jsoneditor;
+      
+      // Add control buttons to the end of the form
+      var controls = document.createElement('div');
+      controls.className = 'controls configuration-buttons closed';
+      container.getDOMNode().appendChild(controls);
+      
+      // Discard changes button
+      var cancel_button = document.createElement('button');
+      cancel_button.textContent = 'Discard changes';
+      cancel_button.className = 'cancel';
+      cancel_button.addEventListener('click', function(e) {
+        self.cancelConfig();
+      });
+      controls.appendChild(cancel_button);
+      
+      // Save button
+      var confirm_button = document.createElement('button');
+      confirm_button.textContent = 'Save changes';
+      confirm_button.className = 'confirm';
+      confirm_button.addEventListener('click', function(e) {
+        self.saveConfig();
+      });
+      controls.appendChild(confirm_button);
 
 /*
       container.setHTML(
@@ -187,8 +219,8 @@ YUI.add('service-config-view', function(Y) {
       if (inspector.configFileContent) {
         config = null;
       } else {
-        config = utils.getElementsValuesMapping(container, '.config-field');
-        errors = utils.validate(config, schema);
+        config = this.jsoneditor.getValue();
+        errors = this.jsoneditor.validate();
       }
 
       if (Y.Object.isEmpty(errors)) {
@@ -254,8 +286,8 @@ YUI.add('service-config-view', function(Y) {
         // Mix the current config (stored in the db) with the modified options.
         var config = Y.mix(service.get('config'), evt.newValues, true);
         service.set('config', config);
-        var bindingEngine = this.viewletManager.bindingEngine;
-        bindingEngine.resetDOMToModel('config');
+        
+        this.jsoneditor.setValue(config);
       }
       this.onRemoveFile();
       container.one('.controls .confirm').removeAttribute('disabled');
@@ -270,7 +302,8 @@ YUI.add('service-config-view', function(Y) {
     */
     cancelConfig: function(e) {
       this.onRemoveFile();
-      this.viewletManager.bindingEngine.resetDOMToModel('config');
+      var service = this.viewletManager.get('model');
+      this.jsoneditor.setValue(service.get('config'));
     },
 
     /**
